@@ -29,20 +29,28 @@ set_target_properties(ofxsupport PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # ---------------------------------------------------------------------------
 #  Embed the shared color engine as a runtime-compiled source string for the
 #  OpenCL and Metal backends (header text + the relevant entry kernel).
+#  Emitted as a byte array (not a string literal) so it has no length limit -
+#  MSVC caps a single string literal well below our ~22 KB of source.
 # ---------------------------------------------------------------------------
-file(READ ${SRC}/PontusColorKernel.h KERNEL_TEXT)
+file(READ ${SRC}/PontusColorKernel.h KERNEL_HEX HEX)
 
-file(READ ${SRC}/PontusColorOpenCLEntry.cl OCL_ENTRY)
+# helper: turn a concatenated hex blob into "0xAB,0xCD,..." then a C array
+function(write_embedded_source out_file symbol hex_blob)
+    string(REGEX REPLACE "(..)" "0x\\1," _bytes "${hex_blob}")
+    file(WRITE ${out_file}
+"extern const char* ${symbol};\n\
+static const unsigned char _data[] = { ${_bytes} 0x00 };\n\
+const char* ${symbol} = (const char*)_data;\n")
+endfunction()
+
+file(READ ${SRC}/PontusColorOpenCLEntry.cl OCL_HEX HEX)
 set(GEN_OCL ${CMAKE_BINARY_DIR}/PontusColorKernelSource.cpp)
-file(WRITE ${GEN_OCL}
-"extern const char* PontusColorKernelSource;\n\
-const char* PontusColorKernelSource = R\"PCKERNEL(\n${KERNEL_TEXT}\n${OCL_ENTRY}\n)PCKERNEL\";\n")
+# 0a = newline joining the header and the entry kernel
+write_embedded_source(${GEN_OCL} PontusColorKernelSource "${KERNEL_HEX}0a${OCL_HEX}")
 
-file(READ ${SRC}/PontusColorMetalEntry.metal MTL_ENTRY)
+file(READ ${SRC}/PontusColorMetalEntry.metal MTL_HEX HEX)
 set(GEN_MTL ${CMAKE_BINARY_DIR}/PontusColorKernelSourceMetal.cpp)
-file(WRITE ${GEN_MTL}
-"extern const char* PontusColorKernelSourceMetal;\n\
-const char* PontusColorKernelSourceMetal = R\"PCKERNEL(\n${KERNEL_TEXT}\n${MTL_ENTRY}\n)PCKERNEL\";\n")
+write_embedded_source(${GEN_MTL} PontusColorKernelSourceMetal "${KERNEL_HEX}0a${MTL_HEX}")
 
 # ---------------------------------------------------------------------------
 #  The plugin module (output: PontusColor.ofx)
