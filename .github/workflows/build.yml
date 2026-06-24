@@ -1,0 +1,38 @@
+name: Build PontusColor
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (universal)
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+          cmake --build build --config Release -j
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PontusColor-macOS
+          path: build/PontusColor.ofx.bundle
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OpenCL (vcpkg)
+        run: vcpkg install opencl:x64-windows
+      - name: Build
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
+                -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+                -DPONTUS_WITH_CUDA=OFF
+          cmake --build build --config Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PontusColor-Windows
+          path: build/PontusColor.ofx.bundle
